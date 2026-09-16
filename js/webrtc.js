@@ -370,7 +370,7 @@ class WebRTCManager {
    */
   initializeIncomingFile(meta) {
     const fileId = meta.id;
-    console.log('[WebRTC] Initializing incoming file:', meta.name, 'ID:', fileId, 'Size:', meta.size);
+    console.log('[WebRTC] Initializing incoming file:', meta.name, 'ID:', fileId, 'Size:', meta.size, 'InChat:', !!meta.inChat);
     this.incomingFiles.set(fileId, {
       id: fileId,
       name: meta.name,
@@ -380,6 +380,7 @@ class WebRTCManager {
       chunkSize: meta.chunkSize,
       expectedHash: meta.hash,
       isEncrypted: meta.isEncrypted,
+      inChat: !!meta.inChat,
       receivedBytes: 0,
       receivedChunks: 0,
       chunks: new Array(meta.chunksTotal),
@@ -397,7 +398,8 @@ class WebRTCManager {
       total: meta.size,
       percent: 0,
       speed: 0,
-      state: 'receiving'
+      state: 'receiving',
+      inChat: !!meta.inChat
     });
   }
 
@@ -460,14 +462,24 @@ class WebRTCManager {
       total: fileMeta.size,
       percent: percent,
       speed: fileMeta.currentSpeed,
-      state: 'receiving'
+      state: 'receiving',
+      inChat: fileMeta.inChat
     });
 
-    // Check completion
+    // Check completion: ensure all chunks from 0 to chunksTotal - 1 are present
     if (!fileMeta.isFinalized && (fileMeta.receivedChunks >= fileMeta.chunksTotal || fileMeta.receivedBytes >= fileMeta.size)) {
-      fileMeta.isFinalized = true;
-      console.log('[WebRTC] File download complete, assembling blob:', fileMeta.name);
-      await this.finalizeIncomingFile(fileMeta);
+      let isComplete = true;
+      for (let i = 0; i < fileMeta.chunksTotal; i++) {
+        if (!fileMeta.chunks[i]) {
+          isComplete = false;
+          break;
+        }
+      }
+      if (isComplete) {
+        fileMeta.isFinalized = true;
+        console.log('[WebRTC] File download complete, assembling blob:', fileMeta.name);
+        await this.finalizeIncomingFile(fileMeta);
+      }
     }
   }
 
@@ -480,7 +492,7 @@ class WebRTCManager {
       const calculatedHash = await window.cryptCore.calculateHash(finalBlob);
 
       const isVerified = !fileMeta.expectedHash || (fileMeta.expectedHash === calculatedHash);
-      console.log('[WebRTC] File assembled. Verified:', isVerified, 'Size:', finalBlob.size);
+      console.log('[WebRTC] File assembled:', fileMeta.name, 'Verified:', isVerified, 'Size:', finalBlob.size);
 
       this.callbacks.onFileReceived({
         id: fileMeta.id,
@@ -489,7 +501,8 @@ class WebRTCManager {
         mimeType: fileMeta.mimeType,
         blob: finalBlob,
         hash: calculatedHash,
-        isVerified: isVerified
+        isVerified: isVerified,
+        inChat: fileMeta.inChat
       });
     } catch (e) {
       console.error('Failed to finalize received file:', e);
@@ -502,7 +515,7 @@ class WebRTCManager {
   /**
    * Transmits a File / Blob with Flow Control & Backpressure
    */
-  async sendFile(file, isEncrypted = true) {
+  async sendFile(file, isEncrypted = true, inChat = false) {
     if (!this.conn || !this.conn.open) {
       throw new Error('No active peer connection. Connect to a peer first.');
     }
@@ -529,7 +542,8 @@ class WebRTCManager {
       chunksTotal: chunksTotal,
       chunkSize: this.CHUNK_SIZE,
       hash: fileHash,
-      isEncrypted: isEncrypted && !!this.encryptionKey
+      isEncrypted: isEncrypted && !!this.encryptionKey,
+      inChat: inChat
     });
 
     let transferredBytes = 0;
@@ -595,7 +609,8 @@ class WebRTCManager {
         total: file.size,
         percent: percent,
         speed: currentSpeed,
-        state: 'sending'
+        state: 'sending',
+        inChat: inChat
       });
     }
 
@@ -607,8 +622,11 @@ class WebRTCManager {
       total: file.size,
       percent: 100,
       speed: 0,
-      state: 'completed'
+      state: 'completed',
+      inChat: inChat
     });
+
+    return { id: fileIdNumeric, name: file.name, size: file.size, hash: fileHash };
   }
 
   /**

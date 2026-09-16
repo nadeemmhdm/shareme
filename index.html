@@ -42,8 +42,8 @@
   <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
 
   <!-- Application Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=2.2.0">
-  <link rel="stylesheet" href="css/responsive.css?v=2.2.0">
+  <link rel="stylesheet" href="css/style.css?v=2.4.0">
+  <link rel="stylesheet" href="css/responsive.css?v=2.4.0">
 
   <!-- Schema.org JSON-LD for Search Engines & AEO -->
   <script type="application/ld+json">
@@ -276,24 +276,55 @@
       <div style="display: flex; align-items: center; gap: 0.5rem;">
         <i class="bx bx-lock" style="color: var(--accent-cyan);"></i>
         <strong>Encrypted Chat</strong>
+        <span id="chat-peer-status" style="font-size: 0.75rem; color: var(--accent-emerald);">• Connected</span>
       </div>
       <button id="close-chat-btn" class="btn-icon" style="width: 30px; height: 30px;" aria-label="Close Chat">
         <i class="bx bx-x"></i>
       </button>
     </div>
 
+    <!-- Quick Emoji Reaction Bar -->
+    <div class="chat-emoji-bar" id="chat-emoji-bar">
+      <button class="emoji-btn" type="button" data-emoji="😀">😀</button>
+      <button class="emoji-btn" type="button" data-emoji="❤️">❤️</button>
+      <button class="emoji-btn" type="button" data-emoji="👍">👍</button>
+      <button class="emoji-btn" type="button" data-emoji="🔥">🔥</button>
+      <button class="emoji-btn" type="button" data-emoji="🚀">🚀</button>
+      <button class="emoji-btn" type="button" data-emoji="🎉">🎉</button>
+      <button class="emoji-btn" type="button" data-emoji="🔒">🔒</button>
+      <button class="emoji-btn" type="button" data-emoji="📁">📁</button>
+      <button id="toggle-emoji-picker-btn" class="emoji-btn-more" type="button" title="More Emojis"><i class="bx bx-smile"></i></button>
+    </div>
+
+    <!-- Expandable Full Emoji Grid -->
+    <div id="full-emoji-picker" class="full-emoji-picker hidden">
+      <span class="emoji-item">😀</span><span class="emoji-item">😃</span><span class="emoji-item">😄</span><span class="emoji-item">😁</span>
+      <span class="emoji-item">😆</span><span class="emoji-item">😅</span><span class="emoji-item">😂</span><span class="emoji-item">🤣</span>
+      <span class="emoji-item">😊</span><span class="emoji-item">😇</span><span class="emoji-item">🙂</span><span class="emoji-item">😉</span>
+      <span class="emoji-item">😍</span><span class="emoji-item">🥰</span><span class="emoji-item">😘</span><span class="emoji-item">😋</span>
+      <span class="emoji-item">😜</span><span class="emoji-item">🤩</span><span class="emoji-item">🥳</span><span class="emoji-item">😎</span>
+      <span class="emoji-item">🤝</span><span class="emoji-item">👍</span><span class="emoji-item">👏</span><span class="emoji-item">🙌</span>
+      <span class="emoji-item">🔥</span><span class="emoji-item">✨</span><span class="emoji-item">🎉</span><span class="emoji-item">🚀</span>
+      <span class="emoji-item">❤️</span><span class="emoji-item">💯</span><span class="emoji-item">⚡</span><span class="emoji-item">🔒</span>
+      <span class="emoji-item">📁</span><span class="emoji-item">📦</span><span class="emoji-item">💾</span><span class="emoji-item">💻</span>
+    </div>
+
     <div id="chat-messages-list" class="chat-messages">
       <div class="chat-msg chat-msg-peer">
         <div class="chat-bubble">
           <span class="chat-sender">System</span>
-          <p class="chat-text">Messages sent here are encrypted end-to-end via WebRTC DataChannel.</p>
+          <p class="chat-text">Messages and files shared here are encrypted end-to-end via WebRTC DataChannel.</p>
         </div>
       </div>
     </div>
 
     <div class="chat-footer">
+      <button id="chat-attach-file-btn" class="btn-icon" style="width: 38px; height: 38px; flex-shrink: 0;" title="Send file or image in chat">
+        <i class="bx bx-paperclip"></i>
+      </button>
+      <input type="file" id="chat-file-input" class="hidden">
       <input type="text" id="chat-input" class="input-control" style="font-size: 0.9rem; padding: 0.6rem 0.9rem;" placeholder="Type encrypted message...">
-      <button id="send-chat-btn" class="btn btn-primary btn-sm">
+      <button id="send-chat-btn" class="btn btn-primary btn-sm" style="flex-shrink: 0;">
         <i class="bx bx-send"></i>
       </button>
     </div>
@@ -381,11 +412,11 @@
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
   <!-- CryptShare Modules -->
-  <script src="js/qrcode.min.js?v=2.2.0"></script>
-  <script src="js/crypto.js?v=2.2.0"></script>
-  <script src="js/webrtc.js?v=2.2.0"></script>
-  <script src="js/ui.js?v=2.2.0"></script>
-  <script src="js/app.js?v=2.2.0"></script>
+  <script src="js/qrcode.min.js?v=2.4.0"></script>
+  <script src="js/crypto.js?v=2.4.0"></script>
+  <script src="js/webrtc.js?v=2.4.0"></script>
+  <script src="js/ui.js?v=2.4.0"></script>
+  <script src="js/app.js?v=2.4.0"></script>
 
 </body>
 </html>

@@ -118,7 +118,12 @@ class CryptShareApp {
       chatMessagesList: document.getElementById('chat-messages-list'),
       chatInput: document.getElementById('chat-input'),
       sendChatBtn: document.getElementById('send-chat-btn'),
-      chatBadge: document.getElementById('chat-unread-badge')
+      chatBadge: document.getElementById('chat-unread-badge'),
+      chatAttachBtn: document.getElementById('chat-attach-file-btn'),
+      chatFileInput: document.getElementById('chat-file-input'),
+      chatEmojiBar: document.getElementById('chat-emoji-bar'),
+      toggleEmojiPickerBtn: document.getElementById('toggle-emoji-picker-btn'),
+      fullEmojiPicker: document.getElementById('full-emoji-picker')
     };
   }
 
@@ -304,12 +309,44 @@ class CryptShareApp {
       this.soundEnabled = e.target.checked;
     });
 
-    // Chat Drawer
+    // Chat Drawer Events
     this.dom.chatToggleBtn.addEventListener('click', () => this.toggleChatDrawer());
     this.dom.closeChatBtn.addEventListener('click', () => this.closeChatDrawer());
     this.dom.sendChatBtn.addEventListener('click', () => this.sendChatMessage());
     this.dom.chatInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') this.sendChatMessage();
+    });
+
+    // Chat Attachment Button
+    if (this.dom.chatAttachBtn && this.dom.chatFileInput) {
+      this.dom.chatAttachBtn.addEventListener('click', () => {
+        this.dom.chatFileInput.click();
+      });
+
+      this.dom.chatFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          await this.sendChatFile(file);
+          this.dom.chatFileInput.value = '';
+        }
+      });
+    }
+
+    // Emoji Support in Chat
+    if (this.dom.toggleEmojiPickerBtn && this.dom.fullEmojiPicker) {
+      this.dom.toggleEmojiPickerBtn.addEventListener('click', () => {
+        this.dom.fullEmojiPicker.classList.toggle('hidden');
+      });
+    }
+
+    // Insert Emoji Click Handlers
+    document.querySelectorAll('.emoji-btn, .emoji-item').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const emoji = e.target.getAttribute('data-emoji') || e.target.textContent.trim();
+        if (emoji) {
+          this.insertEmoji(emoji);
+        }
+      });
     });
 
     // Close modals when clicking backdrop
@@ -318,6 +355,16 @@ class CryptShareApp {
         if (e.target === modal) this.closeModal(modal);
       });
     });
+  }
+
+  insertEmoji(emoji) {
+    const input = this.dom.chatInput;
+    const start = input.selectionStart || input.value.length;
+    const end = input.selectionEnd || input.value.length;
+    input.value = input.value.substring(0, start) + emoji + input.value.substring(end);
+    input.focus();
+    input.selectionStart = input.selectionEnd = start + emoji.length;
+    this.playSound('click');
   }
 
   setupWebRTCCallbacks() {
@@ -342,12 +389,12 @@ class CryptShareApp {
         }
       },
       onSessionHandshake: async (msg) => {
-        console.log('[WebRTC] Session handshake received');
-        // Synchronize key over DTLS if recipient didn't have it in URL
-        if (!this.encryptionSecret && msg.secret) {
+        console.log('[WebRTC] Session handshake received from host');
+        // Always synchronize secret with host so AES-256 keys match 100%
+        if (msg.secret) {
           this.encryptionSecret = msg.secret;
           await this.deriveActiveKey();
-          window.uiController.showToast('Zero-Knowledge encryption key synchronized over secure DTLS channel!', 'success');
+          console.log('[WebRTC] Encryption key synchronized with host');
         }
         if (msg.hasPassword && !this.customPassword) {
           window.uiController.showToast('This room is password protected. Click "Password Protect" to enter password.', 'warning');
@@ -541,7 +588,7 @@ class CryptShareApp {
       this.dom.transferFileName.textContent = file.name;
 
       try {
-        await window.webrtcManager.sendFile(file, true);
+        await window.webrtcManager.sendFile(file, true, false);
         if (badge) {
           badge.className = 'queue-status-badge status-completed';
           badge.textContent = 'Sent';
@@ -587,10 +634,31 @@ class CryptShareApp {
     this.playSound('complete');
     window.uiController.showToast(`Received ${fileMeta.name} (${UIController.formatBytes(fileMeta.size)})`, 'success');
 
-    // Smoothly scroll down to received files section
-    setTimeout(() => {
-      this.dom.receivedSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 200);
+    // If file was sent inside chat, append file card to chat thread
+    if (fileMeta.inChat) {
+      const blobUrl = URL.createObjectURL(fileMeta.blob);
+      this.appendChatFileCard({
+        name: fileMeta.name,
+        size: fileMeta.size,
+        mimeType: fileMeta.mimeType,
+        blob: fileMeta.blob,
+        blobUrl: blobUrl,
+        isSelf: false,
+        sender: 'Peer',
+        timestamp: Date.now()
+      });
+
+      if (!this.dom.chatDrawer.classList.contains('open')) {
+        this.dom.chatBadge.classList.remove('hidden');
+        const count = (parseInt(this.dom.chatBadge.textContent) || 0) + 1;
+        this.dom.chatBadge.textContent = count;
+      }
+    } else {
+      // Smoothly scroll down to received files section
+      setTimeout(() => {
+        this.dom.receivedSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 200);
+    }
 
     // Auto download if enabled
     if (this.autoDownload) {
@@ -614,7 +682,7 @@ class CryptShareApp {
             <span class="received-name">${UIController.prototype.escapeHtml(fileMeta.name)}</span>
             <div class="received-badges">
               <span class="file-size-badge">${UIController.formatBytes(fileMeta.size)}</span>
-              ${fileMeta.isVerified ? '<span class="verified-badge" title="SHA-256 Checksum Verified"><i class="bx bx-check-shield"></i> Verified Authentic</span>' : '<span class="unverified-badge">Unverified</span>'}
+              ${fileMeta.isVerified ? '<span class="verified-badge" title="SHA-256 Checksum Verified"><i class="bx bx-check-shield"></i> Verified Authentic</span>' : '<span class="unverified-badge">Checksum Error</span>'}
             </div>
           </div>
         </div>
@@ -643,15 +711,16 @@ class CryptShareApp {
     a.download = fileMeta.name;
     document.body.appendChild(a);
     a.click();
+    // Keep blob URL valid for 60 seconds so browser download manager finishes writing full file
     setTimeout(() => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    }, 200);
+    }, 60000);
   }
 
   downloadAllReceived() {
     this.receivedFiles.forEach((file, index) => {
-      setTimeout(() => this.triggerDownload(file), index * 300);
+      setTimeout(() => this.triggerDownload(file), index * 400);
     });
   }
 
@@ -691,6 +760,71 @@ class CryptShareApp {
 
     this.dom.chatInput.value = '';
     this.playSound('click');
+  }
+
+  async sendChatFile(file) {
+    if (!window.webrtcManager.conn || !window.webrtcManager.conn.open) {
+      window.uiController.showToast('Peer not connected yet!', 'warning');
+      return;
+    }
+
+    const blobUrl = URL.createObjectURL(file);
+    this.appendChatFileCard({
+      name: file.name,
+      size: file.size,
+      mimeType: file.type,
+      blob: file,
+      blobUrl: blobUrl,
+      isSelf: true,
+      sender: 'You',
+      timestamp: Date.now()
+    });
+
+    try {
+      window.uiController.showToast(`Sending ${file.name} in chat...`, 'info');
+      await window.webrtcManager.sendFile(file, true, true);
+      this.playSound('complete');
+    } catch (e) {
+      console.error('Chat file send error:', e);
+      window.uiController.showToast(`Failed to send file in chat: ${e.message}`, 'error');
+    }
+  }
+
+  appendChatFileCard(item) {
+    const list = this.dom.chatMessagesList;
+    const msgEl = document.createElement('div');
+    msgEl.className = `chat-msg ${item.isSelf ? 'chat-msg-self' : 'chat-msg-peer'} animate-fade-in`;
+
+    const timeStr = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const isImg = item.mimeType && item.mimeType.startsWith('image/');
+    const iconClass = UIController.getFileIconClass(item.name, item.mimeType);
+
+    msgEl.innerHTML = `
+      <div class="chat-bubble chat-file-card">
+        <span class="chat-sender">${item.sender}</span>
+        <div class="chat-file-inner">
+          ${isImg ? `<img src="${item.blobUrl}" class="chat-img-preview" alt="Image preview">` : ''}
+          <div class="chat-file-info">
+            <i class="${iconClass}"></i>
+            <div>
+              <div class="chat-file-name" title="${UIController.prototype.escapeHtml(item.name)}">${UIController.prototype.escapeHtml(item.name)}</div>
+              <div class="chat-file-size">${UIController.formatBytes(item.size)}</div>
+            </div>
+          </div>
+          <button class="btn btn-secondary btn-sm chat-download-btn" style="width: 100%; margin-top: 0.25rem;">
+            <i class="bx bx-download"></i> Download
+          </button>
+        </div>
+        <span class="chat-time">${timeStr} <i class="bx bxs-lock-alt" title="E2EE Encrypted"></i></span>
+      </div>
+    `;
+
+    msgEl.querySelector('.chat-download-btn').addEventListener('click', () => {
+      this.triggerDownload({ blob: item.blob, name: item.name });
+    });
+
+    list.appendChild(msgEl);
+    list.scrollTop = list.scrollHeight;
   }
 
   async handleIncomingChatMessage(msg) {
