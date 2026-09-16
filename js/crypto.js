@@ -94,8 +94,8 @@ class CryptCore {
       throw new Error('Encrypted chunk is too small to contain IV and auth tag');
     }
 
-    const iv = packedBytes.subarray(0, 12);
-    const ciphertext = packedBytes.subarray(12);
+    const iv = packedBytes.slice(0, 12);
+    const ciphertext = packedBytes.slice(12);
 
     return await this.crypto.decrypt(
       {

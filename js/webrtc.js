@@ -149,7 +149,7 @@ class WebRTCManager {
         this.peer.on('error', (err) => {
           console.error('[WebRTC Host Error]', err);
           if (err.type === 'unavailable-id') {
-            console.warn(`[WebRTC] Room ID ${hostPeerId} collision detected. Triggering room regeneration.`);
+            console.warn(`[WebRTC] Room ID ${hostPeerId} collision. Triggering room regeneration.`);
             this.callbacks.onRoomCollision();
           } else {
             this.handlePeerError(err);
@@ -306,8 +306,15 @@ class WebRTCManager {
 
     // Binary packet: incoming file chunk
     if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
-      const buffer = data instanceof ArrayBuffer ? data : data.buffer;
-      await this.handleIncomingChunk(buffer);
+      let buffer = data;
+      let byteOffset = 0;
+      let byteLength = data.byteLength;
+
+      if (ArrayBuffer.isView(data)) {
+        buffer = data.buffer;
+        byteOffset = data.byteOffset;
+      }
+      await this.handleIncomingChunk(buffer, byteOffset, byteLength);
     }
   }
 
@@ -345,6 +352,7 @@ class WebRTCManager {
    */
   initializeIncomingFile(meta) {
     const fileId = meta.id;
+    console.log('[WebRTC] Initializing incoming file:', meta.name, 'ID:', fileId, 'Size:', meta.size);
     this.incomingFiles.set(fileId, {
       id: fileId,
       name: meta.name,
@@ -360,7 +368,8 @@ class WebRTCManager {
       startTime: performance.now(),
       lastSpeedCheck: performance.now(),
       lastBytesCheck: 0,
-      currentSpeed: 0
+      currentSpeed: 0,
+      isFinalized: false
     });
 
     this.callbacks.onProgress({
@@ -377,30 +386,35 @@ class WebRTCManager {
   /**
    * Process a binary chunk received over DataChannel
    */
-  async handleIncomingChunk(buffer) {
-    const view = new DataView(buffer);
-    const chunkIndex = view.getUint32(8, false);
-    const payloadLength = view.getUint32(12, false);
-
-    const fileIdBytes = new Uint8Array(buffer, 0, 8);
-    const fileId = Array.from(fileIdBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-
-    const fileMeta = this.incomingFiles.get(fileId);
-    if (!fileMeta) {
-      console.warn('Received chunk for unknown file:', fileId);
+  async handleIncomingChunk(buffer, byteOffset = 0, totalLength = 0) {
+    if (totalLength < 16) {
+      console.warn('Chunk packet smaller than 16-byte header:', totalLength);
       return;
     }
 
-    const payloadBuffer = buffer.slice(16, 16 + payloadLength);
-    let chunkData = payloadBuffer;
+    const view = new DataView(buffer, byteOffset, 16);
+    const fileId = view.getUint32(0, false);
+    const chunkIndex = view.getUint32(4, false);
+    const chunksTotal = view.getUint32(8, false);
+    const payloadLength = view.getUint32(12, false);
 
-    // Decrypt if file is marked encrypted and key exists
+    const fileMeta = this.incomingFiles.get(fileId);
+    if (!fileMeta) {
+      console.warn('Received chunk for unknown file ID:', fileId);
+      return;
+    }
+
+    // Isolate payload bytes cleanly into a standalone ArrayBuffer
+    const payloadSlice = new Uint8Array(buffer, byteOffset + 16, payloadLength);
+    let chunkData = payloadSlice.slice().buffer;
+
+    // Decrypt if file was marked encrypted
     if (fileMeta.isEncrypted && this.encryptionKey) {
       try {
-        chunkData = await window.cryptCore.decryptChunk(payloadBuffer, this.encryptionKey);
+        chunkData = await window.cryptCore.decryptChunk(chunkData, this.encryptionKey);
       } catch (err) {
         console.error('Decryption failed on chunk', chunkIndex, err);
-        this.callbacks.onError(new Error(`Failed to decrypt chunk ${chunkIndex}. Invalid password/key.`));
+        this.callbacks.onError(new Error(`Failed to decrypt chunk ${chunkIndex}. Password or key mismatch.`));
         return;
       }
     }
@@ -432,7 +446,9 @@ class WebRTCManager {
     });
 
     // Check completion
-    if (fileMeta.receivedChunks === fileMeta.chunksTotal || fileMeta.receivedBytes >= fileMeta.size) {
+    if (!fileMeta.isFinalized && (fileMeta.receivedChunks >= fileMeta.chunksTotal || fileMeta.receivedBytes >= fileMeta.size)) {
+      fileMeta.isFinalized = true;
+      console.log('[WebRTC] File download complete, assembling blob:', fileMeta.name);
       await this.finalizeIncomingFile(fileMeta);
     }
   }
@@ -441,22 +457,28 @@ class WebRTCManager {
    * Assemble chunks into Blob and verify checksum
    */
   async finalizeIncomingFile(fileMeta) {
-    const finalBlob = new Blob(fileMeta.chunks, { type: fileMeta.mimeType });
-    const calculatedHash = await window.cryptCore.calculateHash(finalBlob);
+    try {
+      const finalBlob = new Blob(fileMeta.chunks, { type: fileMeta.mimeType });
+      const calculatedHash = await window.cryptCore.calculateHash(finalBlob);
 
-    const isVerified = !fileMeta.expectedHash || (fileMeta.expectedHash === calculatedHash);
+      const isVerified = !fileMeta.expectedHash || (fileMeta.expectedHash === calculatedHash);
+      console.log('[WebRTC] File assembled. Verified:', isVerified, 'Size:', finalBlob.size);
 
-    this.callbacks.onFileReceived({
-      id: fileMeta.id,
-      name: fileMeta.name,
-      size: fileMeta.size,
-      mimeType: fileMeta.mimeType,
-      blob: finalBlob,
-      hash: calculatedHash,
-      isVerified: isVerified
-    });
-
-    this.incomingFiles.delete(fileMeta.id);
+      this.callbacks.onFileReceived({
+        id: fileMeta.id,
+        name: fileMeta.name,
+        size: fileMeta.size,
+        mimeType: fileMeta.mimeType,
+        blob: finalBlob,
+        hash: calculatedHash,
+        isVerified: isVerified
+      });
+    } catch (e) {
+      console.error('Failed to finalize received file:', e);
+      this.callbacks.onError(new Error(`Error saving file ${fileMeta.name}: ${e.message}`));
+    } finally {
+      this.incomingFiles.delete(fileMeta.id);
+    }
   }
 
   /**
@@ -472,7 +494,8 @@ class WebRTCManager {
       rawDataChannel.bufferedAmountLowThreshold = this.BUFFER_THRESHOLD;
     }
 
-    const fileId = window.cryptCore.constructor.generateSecureToken(4); // 8 hex chars
+    // 32-bit positive integer ID (matches DataView Uint32 exactly on both ends)
+    const fileIdNumeric = Math.floor(Math.random() * 2000000000) + 1;
     const chunksTotal = Math.ceil(file.size / this.CHUNK_SIZE);
     
     // Calculate SHA-256 integrity hash before sending
@@ -481,7 +504,7 @@ class WebRTCManager {
     // 1. Send File Header / Metadata
     this.sendControlMessage({
       type: 'file-header',
-      id: fileId,
+      id: fileIdNumeric,
       name: file.name,
       size: file.size,
       mimeType: file.type || 'application/octet-stream',
@@ -495,11 +518,6 @@ class WebRTCManager {
     let lastSpeedCheck = performance.now();
     let lastBytesCheck = 0;
     let currentSpeed = 0;
-
-    const fileIdBytes = new Uint8Array(8);
-    for (let i = 0; i < 4; i++) {
-      fileIdBytes[i] = parseInt(fileId.substr(i * 2, 2), 16) || 0;
-    }
 
     // 2. Stream chunk by chunk with flow control
     for (let chunkIndex = 0; chunkIndex < chunksTotal; chunkIndex++) {
@@ -515,12 +533,12 @@ class WebRTCManager {
         payload = await window.cryptCore.encryptChunk(sliceBuffer, this.encryptionKey, chunkIndex);
       }
 
-      // Format protocol packet: [8B fileId][4B chunkIndex][4B payloadLength][payload]
+      // Format protocol packet: [4B fileIdNumeric][4B chunkIndex][4B chunksTotal][4B payloadLength][payload]
       const packet = new Uint8Array(16 + payload.byteLength);
-      packet.set(fileIdBytes, 0);
-
       const packetView = new DataView(packet.buffer);
-      packetView.setUint32(8, chunkIndex, false);
+      packetView.setUint32(0, fileIdNumeric, false);
+      packetView.setUint32(4, chunkIndex, false);
+      packetView.setUint32(8, chunksTotal, false);
       packetView.setUint32(12, payload.byteLength, false);
       packet.set(new Uint8Array(payload), 16);
 
@@ -553,7 +571,7 @@ class WebRTCManager {
       const percent = Math.min(100, Math.round((transferredBytes / file.size) * 100));
 
       this.callbacks.onProgress({
-        fileId: fileId,
+        fileId: fileIdNumeric,
         name: file.name,
         transferred: transferredBytes,
         total: file.size,
@@ -565,7 +583,7 @@ class WebRTCManager {
 
     // Complete notification for this file
     this.callbacks.onProgress({
-      fileId: fileId,
+      fileId: fileIdNumeric,
       name: file.name,
       transferred: file.size,
       total: file.size,
