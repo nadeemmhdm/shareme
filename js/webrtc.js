@@ -30,7 +30,8 @@ class WebRTCManager {
       onFileReceived: () => {},
       onChatMessage: () => {},
       onError: () => {},
-      onPingUpdate: () => {}
+      onPingUpdate: () => {},
+      onRoomCollision: () => {}
     };
 
     // Ping interval for connection health & latency
@@ -42,49 +43,56 @@ class WebRTCManager {
     this.callbacks = { ...this.callbacks, ...cbs };
   }
 
+  getIceServers() {
+    return [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: 'stun:stun.services.mozilla.com' }
+    ];
+  }
+
   /**
-   * Initializes PeerJS client
+   * Initializes PeerJS client (client mode with random peer ID)
    */
-  async initPeer(customPrefix = 'cryptshare-room-') {
+  async initPeer() {
+    if (this.peer && !this.peer.destroyed) {
+      try { this.peer.destroy(); } catch (e) {}
+      this.peer = null;
+    }
+
     return new Promise((resolve, reject) => {
-      // PeerJS configuration using public reliable STUN servers
       const peerConfig = {
         config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:global.stun.twilio.com:3478' }
-          ]
+          iceServers: this.getIceServers()
         },
-        debug: 0
+        debug: 1
       };
 
       try {
         this.peer = new Peer(peerConfig);
 
         this.peer.on('open', (id) => {
+          console.log('[WebRTC Client] Registered peer ID:', id);
           this.peerId = id;
           this.callbacks.onReady(id);
           resolve(id);
         });
 
         this.peer.on('connection', (conn) => {
-          // Inbound connection
           this.handleIncomingConnection(conn);
         });
 
         this.peer.on('error', (err) => {
-          console.error('[PeerJS Error]', err);
-          this.callbacks.onError(err);
-          // Auto recover from common connection collisions
-          if (err.type === 'unavailable-id') {
-            this.callbacks.onError(new Error('Room ID already in use. Please generate a new room.'));
-          }
+          console.error('[WebRTC Peer Error]', err);
+          this.handlePeerError(err);
         });
 
         this.peer.on('disconnected', () => {
-          console.warn('[PeerJS Disconnected] Attempting reconnect...');
+          console.warn('[WebRTC Disconnected]');
           if (this.peer && !this.peer.destroyed) {
             this.peer.reconnect();
           }
@@ -106,43 +114,58 @@ class WebRTCManager {
 
     const hostPeerId = `cryptshare-${roomCode}`;
 
+    if (this.conn) {
+      try { this.conn.close(); } catch (e) {}
+      this.conn = null;
+    }
+
     if (this.peer) {
-      this.peer.destroy();
+      try { this.peer.destroy(); } catch (e) {}
+      this.peer = null;
     }
 
     return new Promise((resolve, reject) => {
       const peerConfig = {
         config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:global.stun.twilio.com:3478' }
-          ]
+          iceServers: this.getIceServers()
         },
-        debug: 0
+        debug: 1
       };
 
-      this.peer = new Peer(hostPeerId, peerConfig);
+      try {
+        this.peer = new Peer(hostPeerId, peerConfig);
 
-      this.peer.on('open', (id) => {
-        this.peerId = id;
-        this.callbacks.onReady(id);
-        resolve(id);
-      });
+        this.peer.on('open', (id) => {
+          console.log('[WebRTC Host] Room active on peer ID:', id);
+          this.peerId = id;
+          this.callbacks.onReady(id);
+          resolve(id);
+        });
 
-      this.peer.on('connection', (conn) => {
-        this.handleIncomingConnection(conn);
-      });
+        this.peer.on('connection', (conn) => {
+          this.handleIncomingConnection(conn);
+        });
 
-      this.peer.on('error', (err) => {
-        if (err.type === 'unavailable-id') {
-          // Room code in use, suggest regeneration
-          this.callbacks.onError(new Error('Room code is already active. Please generate a new room code.'));
-        } else {
-          this.callbacks.onError(err);
-        }
+        this.peer.on('error', (err) => {
+          console.error('[WebRTC Host Error]', err);
+          if (err.type === 'unavailable-id') {
+            console.warn(`[WebRTC] Room ID ${hostPeerId} collision detected. Triggering room regeneration.`);
+            this.callbacks.onRoomCollision();
+          } else {
+            this.handlePeerError(err);
+          }
+          reject(err);
+        });
+
+        this.peer.on('disconnected', () => {
+          if (this.peer && !this.peer.destroyed) {
+            this.peer.reconnect();
+          }
+        });
+
+      } catch (err) {
         reject(err);
-      });
+      }
     });
   }
 
@@ -151,31 +174,63 @@ class WebRTCManager {
    */
   async joinRoom(roomCode, key) {
     this.isHost = false;
-    this.roomCode = roomCode;
+    const cleanRoomCode = (roomCode || '').trim();
+    this.roomCode = cleanRoomCode;
     this.encryptionKey = key;
 
-    if (!this.peer || this.peer.destroyed) {
-      await this.initPeer();
+    if (this.conn) {
+      try { this.conn.close(); } catch (e) {}
+      this.conn = null;
     }
 
-    const hostPeerId = `cryptshare-${roomCode}`;
+    // Always create a fresh client peer with a unique client ID
+    await this.initPeer();
+
+    const hostPeerId = `cryptshare-${cleanRoomCode}`;
     this.callbacks.onConnecting(hostPeerId);
+    console.log('[WebRTC] Connecting to host:', hostPeerId);
 
     const conn = this.peer.connect(hostPeerId, {
       reliable: true,
       serialization: 'binary'
     });
 
+    let isConnected = false;
+    const connectTimer = setTimeout(() => {
+      if (!isConnected && (!this.conn || !this.conn.open)) {
+        this.callbacks.onError(new Error(`Connection to room ${cleanRoomCode} timed out. Ensure the host is active and has this room open.`));
+      }
+    }, 12000);
+
+    conn.on('open', () => {
+      isConnected = true;
+      clearTimeout(connectTimer);
+    });
+
     this.setupConnection(conn);
+  }
+
+  handlePeerError(err) {
+    let friendlyMessage = err.message || 'Connection error';
+    if (err.type === 'peer-unavailable') {
+      friendlyMessage = `Room ${this.roomCode || ''} not found. Please ensure the sender has created the room and is online.`;
+    } else if (err.type === 'unavailable-id') {
+      friendlyMessage = 'Room code is already active. Regenerating a new room code...';
+    } else if (err.type === 'network') {
+      friendlyMessage = 'Network connection error with WebRTC signaling server. Retrying...';
+    } else if (err.type === 'server-error') {
+      friendlyMessage = 'Signaling server temporarily busy. Please retry in a few moments.';
+    }
+    this.callbacks.onError(new Error(friendlyMessage));
   }
 
   /**
    * Connection listener & setup
    */
   handleIncomingConnection(conn) {
-    if (this.conn && this.conn.open) {
-      // We already have a connected peer, but allow reconnect
-      console.log('Incoming reconnection from peer');
+    console.log('[WebRTC] Incoming peer connection from:', conn.peer);
+    if (this.conn) {
+      try { this.conn.close(); } catch (e) {}
     }
     this.setupConnection(conn);
   }
@@ -184,6 +239,7 @@ class WebRTCManager {
     this.conn = conn;
 
     conn.on('open', () => {
+      console.log('[WebRTC] DataChannel open with peer:', conn.peer);
       this.connectedPeerId = conn.peer;
       this.startPingMonitor();
       this.callbacks.onConnected(conn.peer);
@@ -194,6 +250,7 @@ class WebRTCManager {
     });
 
     conn.on('close', () => {
+      console.log('[WebRTC] DataChannel closed');
       this.stopPingMonitor();
       this.callbacks.onDisconnected();
     });
@@ -211,7 +268,7 @@ class WebRTCManager {
         this.lastPingSent = performance.now();
         this.sendControlMessage({ type: 'sys-ping', t: this.lastPingSent });
       }
-    }, 4000);
+    }, 3000);
   }
 
   stopPingMonitor() {
@@ -306,7 +363,6 @@ class WebRTCManager {
       currentSpeed: 0
     });
 
-    // Notify UI that a new file is incoming
     this.callbacks.onProgress({
       fileId,
       name: meta.name,
@@ -320,19 +376,12 @@ class WebRTCManager {
 
   /**
    * Process a binary chunk received over DataChannel
-   * Protocol Header (16 bytes):
-   * - 8 bytes: fileId hash/index
-   * - 4 bytes: chunk index (uint32)
-   * - 4 bytes: chunk payload length (uint32)
-   * - Remaining bytes: Chunk payload (Encrypted or raw)
    */
   async handleIncomingChunk(buffer) {
     const view = new DataView(buffer);
     const chunkIndex = view.getUint32(8, false);
     const payloadLength = view.getUint32(12, false);
 
-    // Extract fileId from the first 8 bytes string or header
-    // We pass fileId in custom header or map by active file
     const fileIdBytes = new Uint8Array(buffer, 0, 8);
     const fileId = Array.from(fileIdBytes).map(b => b.toString(16).padStart(2, '0')).join('');
 
@@ -351,7 +400,7 @@ class WebRTCManager {
         chunkData = await window.cryptCore.decryptChunk(payloadBuffer, this.encryptionKey);
       } catch (err) {
         console.error('Decryption failed on chunk', chunkIndex, err);
-        this.callbacks.onError(new Error(`Failed to decrypt file chunk ${chunkIndex}. Invalid password/key.`));
+        this.callbacks.onError(new Error(`Failed to decrypt chunk ${chunkIndex}. Invalid password/key.`));
         return;
       }
     }
@@ -447,7 +496,6 @@ class WebRTCManager {
     let lastBytesCheck = 0;
     let currentSpeed = 0;
 
-    // Convert fileId (8 hex chars) into 8-byte array
     const fileIdBytes = new Uint8Array(8);
     for (let i = 0; i < 4; i++) {
       fileIdBytes[i] = parseInt(fileId.substr(i * 2, 2), 16) || 0;

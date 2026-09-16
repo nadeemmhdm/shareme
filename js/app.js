@@ -27,12 +27,13 @@ class CryptShareApp {
     this.bindEvents();
     this.setupWebRTCCallbacks();
 
-    // Parse URL Hash (Zero-Knowledge: #code=XXXXXX&key=YYYYYY)
-    await this.checkUrlHash();
+    // Check if user came with a share link in the URL hash (#code=...&key=...)
+    const isJoiningFromLink = await this.checkUrlHash();
 
-    // Default to generating a ready-to-use room code if not joining from URL
-    if (!this.currentRoomCode) {
+    // Only auto-initialize as Host if NOT joining from a URL link!
+    if (!isJoiningFromLink) {
       this.generateNewRoomSecret();
+      await this.initializeHostSession();
     }
   }
 
@@ -149,7 +150,7 @@ class CryptShareApp {
 
   async checkUrlHash() {
     const hash = window.location.hash.substring(1);
-    if (!hash) return;
+    if (!hash) return false;
 
     const params = new URLSearchParams(hash);
     const code = params.get('code') || params.get('room');
@@ -162,14 +163,16 @@ class CryptShareApp {
       if (key) this.dom.joinKeyInput.value = key;
 
       // Switch to join tab automatically
-      this.switchTab('join');
+      this.switchTab('join', false);
       window.uiController.showToast(`Room code ${code} detected from link!`, 'info');
 
-      // Auto-connect after 500ms
+      // Auto-connect
       setTimeout(() => {
         this.handleJoinRoom();
-      }, 500);
+      }, 600);
+      return true;
     }
+    return false;
   }
 
   bindEvents() {
@@ -179,8 +182,8 @@ class CryptShareApp {
     });
 
     // Tab switching
-    this.dom.tabHost.addEventListener('click', () => this.switchTab('host'));
-    this.dom.tabJoin.addEventListener('click', () => this.switchTab('join'));
+    this.dom.tabHost.addEventListener('click', () => this.switchTab('host', true));
+    this.dom.tabJoin.addEventListener('click', () => this.switchTab('join', true));
 
     // Host room controls
     this.dom.copyCodeBtn.addEventListener('click', () => {
@@ -321,6 +324,9 @@ class CryptShareApp {
     window.webrtcManager.setCallbacks({
       onReady: (peerId) => {
         console.log('[WebRTC] Signaling Broker Ready. Peer ID:', peerId);
+        if (window.webrtcManager.isHost) {
+          this.updateConnectionBadge('waiting', 'Ready for Peer');
+        }
       },
       onConnecting: (targetPeerId) => {
         this.updateConnectionBadge('connecting', 'Connecting...');
@@ -355,12 +361,13 @@ class CryptShareApp {
       onError: (err) => {
         console.error('WebRTC error event:', err);
         window.uiController.showToast(err.message || 'Connection error', 'error');
-        this.updateConnectionBadge('disconnected', 'Error');
+        this.updateConnectionBadge('disconnected', 'Connection Error');
+      },
+      onRoomCollision: () => {
+        this.generateNewRoomSecret();
+        this.initializeHostSession();
       }
     });
-
-    // Initialize host session by default
-    this.initializeHostSession();
   }
 
   async initializeHostSession() {
@@ -381,7 +388,7 @@ class CryptShareApp {
   async handleJoinRoom() {
     const roomCode = this.dom.joinCodeInput.value.trim();
     if (!roomCode || roomCode.length < 4) {
-      window.uiController.showToast('Please enter a valid room code', 'error');
+      window.uiController.showToast('Please enter a valid 6-digit room code', 'error');
       return;
     }
 
@@ -409,17 +416,23 @@ class CryptShareApp {
     text.textContent = label;
   }
 
-  switchTab(tab) {
+  switchTab(tab, triggerInit = true) {
     if (tab === 'host') {
       this.dom.tabHost.classList.add('active');
       this.dom.tabJoin.classList.remove('active');
       this.dom.panelHost.classList.remove('hidden');
       this.dom.panelJoin.classList.add('hidden');
+      if (triggerInit && (!window.webrtcManager.isHost || !window.webrtcManager.peer || window.webrtcManager.peer.destroyed)) {
+        this.initializeHostSession();
+      }
     } else {
       this.dom.tabJoin.classList.add('active');
       this.dom.tabHost.classList.remove('active');
       this.dom.panelJoin.classList.remove('hidden');
       this.dom.panelHost.classList.add('hidden');
+      if (triggerInit) {
+        this.updateConnectionBadge('waiting', 'Enter Room Code');
+      }
     }
   }
 
@@ -428,7 +441,6 @@ class CryptShareApp {
 
     for (let i = 0; i < fileList.length; i++) {
       const file = fileList[i];
-      // Check duplicate
       if (!this.selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
         this.selectedFiles.push(file);
       }
