@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Redirecting to CryptShare...</title>
+  <script>
+    // GitHub Pages SPA Hash Redirect Handler
+    // Preserves query strings and URL hash fragments for zero-knowledge links
+    var path = window.location.pathname;
+    var hash = window.location.hash;
+    var repoName = '/shareme'; // standard subpath or root
+    
+    // If hosted on GitHub Pages user.github.io/repo/
+    window.location.replace(window.location.origin + window.location.pathname.replace(/\/[^/]*$/, '/') + 'index.html' + hash);
+  </script>
+</head>
+<body>
+  <p>Redirecting to CryptShare...</p>
+</body>
+</html>

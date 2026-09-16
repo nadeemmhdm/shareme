@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  
+  <!-- Primary SEO Meta Tags -->
+  <title>CryptShare — Free Fast P2P Encrypted File Sharing | Open Source</title>
+  <meta name="title" content="CryptShare — Free Fast P2P Encrypted File Sharing | Open Source">
+  <meta name="description" content="Fast, free, zero-knowledge peer-to-peer file transfer tool. End-to-end encrypted with AES-256-GCM and WebRTC. Unlimited file size, no server uploads, hosted on GitHub Pages.">
+  <meta name="keywords" content="file sharing, p2p transfer, webrtc file share, encrypted file transfer, zero knowledge, github pages tool, fast file transfer, send large files free, cryptshare">
+  <meta name="author" content="CryptShare Open Source Community">
+  <meta name="robots" content="index, follow">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://cryptshare.pages.dev/">
+  <meta property="og:title" content="CryptShare — Fast Zero-Knowledge P2P Encrypted File Transfer">
+  <meta property="og:description" content="Send files of any size directly between browsers with AES-256-GCM encryption. No middleman, no storage, pure WebRTC speed.">
+  <meta property="og:image" content="assets/icon.svg">
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:title" content="CryptShare — Fast Zero-Knowledge P2P Encrypted File Transfer">
+  <meta property="twitter:description" content="Direct browser-to-browser encrypted file transfers. Free, open source, and hosted entirely on GitHub Pages.">
+  <meta property="twitter:image" content="assets/icon.svg">
+
+  <!-- PWA & Mobile Icons -->
+  <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#07090e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;800&display=swap" rel="stylesheet">
+
+  <!-- Boxicons CSS (User rule: default icon library) -->
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+
+  <!-- Application Stylesheets -->
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/responsive.css">
+
+  <!-- Schema.org JSON-LD for Search Engines & AEO -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "CryptShare",
+    "url": "https://cryptshare.pages.dev",
+    "description": "Open-source zero-knowledge WebRTC P2P file transfer tool with AES-256-GCM encryption.",
+    "applicationCategory": "UtilityApplication",
+    "operatingSystem": "All",
+    "browserRequirements": "Requires WebRTC and Web Crypto API support",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
+</head>
+<body>
+
+  <!-- Ambient Light Orbs -->
+  <div class="bg-ambient-orb orb-1"></div>
+  <div class="bg-ambient-orb orb-2"></div>
+
+  <!-- Main Navigation Bar -->
+  <header class="header">
+    <div class="header-container">
+      <a href="#" class="brand" aria-label="CryptShare Home">
+        <img src="assets/icon.svg" alt="CryptShare Shield Logo" class="brand-logo" width="36" height="36">
+        <span class="brand-name">CryptShare</span>
+      </a>
+
+      <div class="header-actions">
+        <!-- Latency Badge -->
+        <span class="metric-badge" id="ping-badge" title="Round-trip latency to peer">
+          <i class="bx bx-transfer-alt"></i> -- ms
+        </span>
+
+        <!-- Encryption Status Badge -->
+        <span class="metric-badge" id="encryption-badge" title="Military-grade AES-256-GCM Web Crypto E2EE">
+          <i class="bx bxs-lock-alt" style="color: var(--accent-cyan);"></i> E2EE Active
+        </span>
+
+        <!-- Connection State Badge -->
+        <div id="connection-status-badge" class="status-badge status-waiting">
+          <span id="connection-status-text">Ready for Peer</span>
+        </div>
+
+        <!-- Encrypted Chat Drawer Trigger -->
+        <button id="chat-toggle-btn" class="btn-icon" aria-label="Open Encrypted Chat" title="Encrypted Peer Chat">
+          <i class="bx bx-message-square-dots"></i>
+          <span id="chat-unread-badge" class="badge-dot hidden">0</span>
+        </button>
+
+        <!-- Settings Trigger -->
+        <button id="settings-btn" class="btn-icon" aria-label="Settings" title="Transfer Settings">
+          <i class="bx bx-cog"></i>
+        </button>
+
+        <!-- Theme Toggle (Dark / Light) -->
+        <button id="theme-toggle-btn" class="btn-icon" aria-label="Toggle Theme" title="Switch Theme">
+          <i class="bx bx-sun"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Application Content -->
+  <main class="main-content">
+    
+    <!-- Hero Banner -->
+    <section class="hero">
+      <h1 class="hero-title">
+        Lightning Fast <span class="hero-gradient-text">P2P File Transfer</span>
+      </h1>
+      <p class="hero-subtitle">
+        Zero-Knowledge end-to-end encrypted file sharing directly between devices. Unlimited file size, no cloud servers, and 100% open source.
+      </p>
+      
+      <div class="feature-pills">
+        <span class="pill"><i class="bx bx-bolt-circle"></i> Direct WebRTC Speed</span>
+        <span class="pill"><i class="bx bx-shield-quarter"></i> AES-256-GCM E2EE</span>
+        <span class="pill"><i class="bx bx-cloud-off"></i> Zero Cloud Storage</span>
+        <span class="pill"><i class="bx bx-infinite"></i> Unlimited File Size</span>
+        <span class="pill"><i class="bx bxl-github"></i> GitHub Pages Ready</span>
+      </div>
+    </section>
+
+    <!-- Main Transfer Interface Card -->
+    <div class="glass-card">
+      
+      <!-- Host / Join Tabs -->
+      <nav class="tabs-nav" role="tablist">
+        <button id="tab-host" class="tab-btn active" role="tab" aria-selected="true" aria-controls="panel-host">
+          <i class="bx bx-upload"></i> Share Files (Create Room)
+        </button>
+        <button id="tab-join" class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-join">
+          <i class="bx bx-download"></i> Receive Files (Join Room)
+        </button>
+      </nav>
+
+      <!-- Panel 1: Host Room Panel -->
+      <section id="panel-host" class="tab-panel">
+        <div class="room-box">
+          <div class="room-code-display">
+            <span class="code-digits" id="display-room-code">------</span>
+          </div>
+
+          <div class="room-actions">
+            <button id="copy-code-btn" class="btn btn-secondary btn-sm" title="Copy 6-digit Code">
+              <i class="bx bx-copy"></i> Copy Code
+            </button>
+            <button id="copy-link-btn" class="btn btn-secondary btn-sm" title="Copy Direct Zero-Knowledge Link">
+              <i class="bx bx-link-alt"></i> Copy Secure Link
+            </button>
+            <button id="show-qr-btn" class="btn btn-secondary btn-sm" title="Pair Mobile via QR Code">
+              <i class="bx bx-qr-scan"></i> Show QR Code
+            </button>
+            <button id="password-toggle-btn" class="btn btn-secondary btn-sm" title="Set Optional Password Protection">
+              <i class="bx bx-key"></i> <span id="password-status-indicator">Password Protect</span>
+            </button>
+            <button id="regen-code-btn" class="btn btn-secondary btn-sm" title="Generate New Room Code">
+              <i class="bx bx-refresh"></i> Refresh Room
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel 2: Join Room Panel -->
+      <section id="panel-join" class="tab-panel hidden">
+        <div class="join-form">
+          <div class="input-group">
+            <label for="join-code-input" class="input-label">6-Digit Room Code</label>
+            <input type="text" id="join-code-input" class="input-control" placeholder="e.g. 849201" maxlength="6" inputmode="numeric">
+          </div>
+          
+          <div class="input-group">
+            <label for="join-key-input" class="input-label">Encryption Secret (Optional if provided in share link)</label>
+            <input type="password" id="join-key-input" class="input-control" placeholder="URL Secret or sender password">
+          </div>
+
+          <button id="join-connect-btn" class="btn btn-primary btn-lg">
+            <i class="bx bx-link"></i> Connect to Peer
+          </button>
+        </div>
+      </section>
+
+      <!-- Drag & Drop Zone -->
+      <div id="drop-zone" class="dropzone" tabindex="0" role="button" aria-label="Drop files here to send">
+        <i class="bx bx-cloud-upload dropzone-icon"></i>
+        <div class="dropzone-text">Drag & Drop files or folders here</div>
+        <div class="dropzone-subtext">or use the buttons below to select from your device</div>
+        
+        <div class="dropzone-buttons">
+          <button id="btn-browse-files" class="btn btn-secondary btn-sm">
+            <i class="bx bx-file"></i> Browse Files
+          </button>
+          <button id="btn-browse-folder" class="btn btn-secondary btn-sm">
+            <i class="bx bx-folder"></i> Browse Folder
+          </button>
+        </div>
+
+        <!-- Hidden Native File Inputs -->
+        <input type="file" id="file-input" multiple class="hidden">
+        <input type="file" id="folder-input" webkitdirectory directory multiple class="hidden">
+      </div>
+
+      <!-- File Queue Section -->
+      <section id="file-queue-section" class="file-queue hidden">
+        <div class="queue-header">
+          <div class="queue-title">
+            <i class="bx bx-list-ul" style="color: var(--accent-cyan);"></i>
+            <span>Transfer Queue (<span id="queue-count-text">0 files</span>)</span>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span id="queue-total-size-text" style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);"></span>
+            <button id="clear-queue-btn" class="btn btn-secondary btn-sm" title="Clear all files">
+              <i class="bx bx-trash"></i> Clear
+            </button>
+          </div>
+        </div>
+
+        <div id="file-queue-list" class="queue-list"></div>
+
+        <div style="margin-top: 1.25rem;">
+          <button id="start-transfer-btn" class="btn btn-primary btn-lg" style="width: 100%;">
+            <i class="bx bx-send"></i> Send Files to Connected Peer
+          </button>
+        </div>
+      </section>
+
+      <!-- Active Transfer Speedometer & Progress Card -->
+      <section id="active-transfer-section" class="active-transfer-card hidden">
+        <div class="transfer-top">
+          <span id="transfer-file-name" class="transfer-filename">Encrypting file...</span>
+          <div class="transfer-metrics">
+            <span id="transfer-speed-text">0 MB/s</span>
+            <span id="transfer-percent-text">0%</span>
+            <span id="transfer-eta-text">ETA: --:--</span>
+          </div>
+        </div>
+        <div class="progress-track">
+          <div id="transfer-progress-bar" class="progress-bar-fill"></div>
+        </div>
+      </section>
+
+      <!-- Received Files Section -->
+      <section id="received-section" class="received-section hidden">
+        <div class="queue-header">
+          <div class="queue-title">
+            <i class="bx bx-check-circle" style="color: var(--accent-emerald);"></i>
+            <span>Received Files (<span id="received-count-text">0 files</span>)</span>
+          </div>
+          <button id="download-all-btn" class="btn btn-secondary btn-sm">
+            <i class="bx bx-download"></i> Save All Files
+          </button>
+        </div>
+
+        <div id="received-list"></div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Encrypted Peer-to-Peer Chat Drawer -->
+  <aside id="chat-drawer" class="chat-drawer" aria-label="Peer Chat Drawer">
+    <div class="chat-header">
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <i class="bx bx-lock" style="color: var(--accent-cyan);"></i>
+        <strong>Encrypted Chat</strong>
+      </div>
+      <button id="close-chat-btn" class="btn-icon" style="width: 30px; height: 30px;" aria-label="Close Chat">
+        <i class="bx bx-x"></i>
+      </button>
+    </div>
+
+    <div id="chat-messages-list" class="chat-messages">
+      <div class="chat-msg chat-msg-peer">
+        <div class="chat-bubble">
+          <span class="chat-sender">System</span>
+          <p class="chat-text">Messages sent here are encrypted end-to-end via WebRTC DataChannel.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-footer">
+      <input type="text" id="chat-input" class="input-control" style="font-size: 0.9rem; padding: 0.6rem 0.9rem;" placeholder="Type encrypted message...">
+      <button id="send-chat-btn" class="btn btn-primary btn-sm">
+        <i class="bx bx-send"></i>
+      </button>
+    </div>
+  </aside>
+
+  <!-- QR Code Modal -->
+  <div id="qr-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="qr-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="qr-modal-title" class="modal-title"><i class="bx bx-qr-scan" style="color: var(--accent-cyan);"></i> Scan to Connect</h2>
+        <button id="close-qr-modal-btn" class="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="qr-canvas-wrapper" id="qr-code-canvas-container"></div>
+      <p id="qr-room-code-text" style="font-family: var(--font-mono); font-weight: 700; margin-bottom: 1rem; color: var(--accent-cyan);"></p>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+        Scan this QR code with any mobile camera to instantly establish an end-to-end encrypted direct P2P link.
+      </p>
+      <button id="copy-qr-link-btn" class="btn btn-secondary" style="width: 100%;">
+        <i class="bx bx-copy"></i> Copy Link Instead
+      </button>
+    </div>
+  </div>
+
+  <!-- Password Protection Modal -->
+  <div id="password-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pwd-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="pwd-modal-title" class="modal-title"><i class="bx bx-shield-quarter" style="color: var(--accent-cyan);"></i> Password Protection</h2>
+        <button class="modal-close" onclick="document.getElementById('password-modal').classList.add('hidden')">&times;</button>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem; text-align: left;">
+        Derives an extra AES-256 key layer using PBKDF2 (100,000 rounds). The recipient must enter this exact password to decrypt chunks.
+      </p>
+      <div class="input-group" style="margin-bottom: 1.5rem;">
+        <label for="custom-password-input" class="input-label">Transfer Passphrase</label>
+        <input type="password" id="custom-password-input" class="input-control" placeholder="Leave empty to disable password">
+      </div>
+      <button id="save-password-btn" class="btn btn-primary" style="width: 100%;">
+        <i class="bx bx-check"></i> Apply Password Settings
+      </button>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="settings-modal-title" class="modal-title"><i class="bx bx-slider" style="color: var(--accent-cyan);"></i> Transfer Settings</h2>
+        <button id="close-settings-modal-btn" class="modal-close">&times;</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 1.25rem; text-align: left;">
+        <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div>
+            <div style="font-weight: 600; font-size: 0.95rem;">Auto-Save Received Files</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Automatically trigger browser download when file transfer completes</div>
+          </div>
+          <input type="checkbox" id="setting-auto-download" checked style="width: 18px; height: 18px;">
+        </label>
+        
+        <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div>
+            <div style="font-weight: 600; font-size: 0.95rem;">Sound Effects</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Synthesized audio chimes for peer connection and completion</div>
+          </div>
+          <input type="checkbox" id="setting-sound" checked style="width: 18px; height: 18px;">
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-links">
+      <a href="https://github.com" target="_blank" rel="noopener"><i class="bx bxl-github"></i> Open Source (MIT)</a>
+      <a href="#panel-host"><i class="bx bx-shield"></i> Security Model</a>
+      <a href="#panel-join"><i class="bx bx-bolt-circle"></i> WebRTC P2P Protocol</a>
+    </div>
+    <p>100% Client-Side • Zero Knowledge • Hosted on GitHub Pages</p>
+  </footer>
+
+  <!-- PeerJS Client Library (Free reliable WebRTC signaling broker) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+  <!-- CryptShare Modules -->
+  <script src="js/qrcode.min.js"></script>
+  <script src="js/crypto.js"></script>
+  <script src="js/webrtc.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "CryptShare P2P File Transfer",
+  "short_name": "CryptShare",
+  "description": "Ultra-fast zero-knowledge peer-to-peer encrypted file sharing tool",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#07090e",
+  "theme_color": "#07090e",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "productivity", "security"]
+}
