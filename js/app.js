@@ -30,6 +30,9 @@ class CryptShareApp {
     // Check if user came with a share link in the URL hash (#code=...&key=...)
     const isJoiningFromLink = await this.checkUrlHash();
 
+    // Listen for hashchange if user navigates or pastes new share link
+    window.addEventListener('hashchange', () => this.checkUrlHash());
+
     // Only auto-initialize as Host if NOT joining from a URL link!
     if (!isJoiningFromLink) {
       this.generateNewRoomSecret();
@@ -629,20 +632,27 @@ class CryptShareApp {
   }
 
   handleFileReceived(fileMeta) {
+    // Generate persistent Blob URL that remains valid for the session
+    if (!fileMeta.objectUrl && fileMeta.blob) {
+      fileMeta.objectUrl = URL.createObjectURL(fileMeta.blob);
+    }
+
+    const type = (fileMeta.mimeType || '').toLowerCase();
+    fileMeta.canPreview = type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/') || type.includes('pdf') || type.includes('text');
+
     this.receivedFiles.push(fileMeta);
     this.renderReceivedFiles();
     this.playSound('complete');
-    window.uiController.showToast(`Received ${fileMeta.name} (${UIController.formatBytes(fileMeta.size)})`, 'success');
+    window.uiController.showToast(`Received "${fileMeta.name}" (${UIController.formatBytes(fileMeta.size)}) - Click Download to save!`, 'success', 6000);
 
     // If file was sent inside chat, append file card to chat thread
     if (fileMeta.inChat) {
-      const blobUrl = URL.createObjectURL(fileMeta.blob);
       this.appendChatFileCard({
         name: fileMeta.name,
         size: fileMeta.size,
         mimeType: fileMeta.mimeType,
         blob: fileMeta.blob,
-        blobUrl: blobUrl,
+        blobUrl: fileMeta.objectUrl,
         isSelf: false,
         sender: 'Peer',
         timestamp: Date.now()
@@ -662,7 +672,7 @@ class CryptShareApp {
 
     // Auto download if enabled
     if (this.autoDownload) {
-      this.triggerDownload(fileMeta);
+      this.triggerDownload(fileMeta, true);
     }
   }
 
@@ -672,6 +682,10 @@ class CryptShareApp {
     list.innerHTML = '';
 
     this.receivedFiles.forEach((fileMeta, index) => {
+      if (!fileMeta.objectUrl && fileMeta.blob) {
+        fileMeta.objectUrl = URL.createObjectURL(fileMeta.blob);
+      }
+
       const iconClass = UIController.getFileIconClass(fileMeta.name, fileMeta.mimeType);
       const card = document.createElement('div');
       card.className = 'received-item animate-fade-in';
@@ -686,16 +700,21 @@ class CryptShareApp {
             </div>
           </div>
         </div>
-        <div class="received-right">
-          <button class="btn btn-primary btn-sm download-btn" data-index="${index}">
+        <div class="received-right" style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+          ${fileMeta.canPreview ? `
+            <a href="${fileMeta.objectUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" title="Preview / Open in new tab">
+              <i class="bx bx-show"></i> Preview
+            </a>
+          ` : ''}
+          <a href="${fileMeta.objectUrl}" download="${UIController.prototype.escapeHtml(fileMeta.name)}" class="btn btn-primary btn-sm download-link-btn" data-index="${index}" title="Save ${UIController.prototype.escapeHtml(fileMeta.name)} to your device">
             <i class="bx bx-download"></i> Download
-          </button>
+          </a>
         </div>
       `;
 
-      card.querySelector('.download-btn').addEventListener('click', (e) => {
-        const idx = parseInt(e.currentTarget.getAttribute('data-index'));
-        this.triggerDownload(this.receivedFiles[idx]);
+      card.querySelector('.download-link-btn').addEventListener('click', () => {
+        this.playSound('complete');
+        window.uiController.showToast(`Downloading "${fileMeta.name}"... Check your downloads.`, 'info');
       });
 
       list.appendChild(card);
@@ -704,23 +723,38 @@ class CryptShareApp {
     this.dom.receivedCountText.textContent = `${this.receivedFiles.length} file${this.receivedFiles.length > 1 ? 's' : ''} received`;
   }
 
-  triggerDownload(fileMeta) {
-    const url = URL.createObjectURL(fileMeta.blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileMeta.name;
-    document.body.appendChild(a);
-    a.click();
-    // Keep blob URL valid for 60 seconds so browser download manager finishes writing full file
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 60000);
+  async triggerDownload(fileMeta, isAuto = false) {
+    if (!fileMeta || !fileMeta.blob) return;
+
+    if (!fileMeta.objectUrl) {
+      fileMeta.objectUrl = URL.createObjectURL(fileMeta.blob);
+    }
+
+    try {
+      const a = document.createElement('a');
+      a.href = fileMeta.objectUrl;
+      a.download = fileMeta.name;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        if (document.body.contains(a)) document.body.removeChild(a);
+      }, 2000);
+
+      if (!isAuto) {
+        window.uiController.showToast(`Downloading "${fileMeta.name}"...`, 'success');
+      }
+    } catch (e) {
+      console.warn('Download trigger notice:', e);
+      if (isAuto) {
+        window.uiController.showToast(`File "${fileMeta.name}" ready! Click "Download" to save.`, 'info', 6000);
+      }
+    }
   }
 
   downloadAllReceived() {
     this.receivedFiles.forEach((file, index) => {
-      setTimeout(() => this.triggerDownload(file), index * 400);
+      setTimeout(() => this.triggerDownload(file, false), index * 500);
     });
   }
 
@@ -811,16 +845,17 @@ class CryptShareApp {
               <div class="chat-file-size">${UIController.formatBytes(item.size)}</div>
             </div>
           </div>
-          <button class="btn btn-secondary btn-sm chat-download-btn" style="width: 100%; margin-top: 0.25rem;">
-            <i class="bx bx-download"></i> Download
-          </button>
+          <a href="${item.blobUrl}" download="${UIController.prototype.escapeHtml(item.name)}" class="btn btn-secondary btn-sm chat-download-btn" style="width: 100%; margin-top: 0.35rem; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; gap: 0.35rem;">
+            <i class="bx bx-download"></i> Download (${UIController.formatBytes(item.size)})
+          </a>
         </div>
         <span class="chat-time">${timeStr} <i class="bx bxs-lock-alt" title="E2EE Encrypted"></i></span>
       </div>
     `;
 
     msgEl.querySelector('.chat-download-btn').addEventListener('click', () => {
-      this.triggerDownload({ blob: item.blob, name: item.name });
+      this.playSound('complete');
+      window.uiController.showToast(`Downloading "${item.name}"... Check downloads.`, 'info');
     });
 
     list.appendChild(msgEl);

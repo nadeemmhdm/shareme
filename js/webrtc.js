@@ -429,7 +429,20 @@ class WebRTCManager {
     let chunkData = payloadSlice.slice().buffer;
 
     // Decrypt if file was marked encrypted
-    if (fileMeta.isEncrypted && this.encryptionKey) {
+    if (fileMeta.isEncrypted) {
+      if (!this.encryptionKey) {
+        console.warn(`[WebRTC] Chunk ${chunkIndex} arrived before encryptionKey is ready. Waiting for key...`);
+        for (let w = 0; w < 40 && !this.encryptionKey; w++) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+      }
+
+      if (!this.encryptionKey) {
+        console.error(`[WebRTC] Encryption key not available for encrypted chunk ${chunkIndex}`);
+        this.callbacks.onError(new Error(`Encryption key missing for file ${fileMeta.name}. Cannot decrypt.`));
+        return;
+      }
+
       try {
         chunkData = await window.cryptCore.decryptChunk(chunkData, this.encryptionKey);
       } catch (err) {
