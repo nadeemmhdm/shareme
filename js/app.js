@@ -341,6 +341,18 @@ class CryptShareApp {
           setTimeout(() => this.startSendingFiles(), 600);
         }
       },
+      onSessionHandshake: async (msg) => {
+        console.log('[WebRTC] Session handshake received');
+        // Synchronize key over DTLS if recipient didn't have it in URL
+        if (!this.encryptionSecret && msg.secret) {
+          this.encryptionSecret = msg.secret;
+          await this.deriveActiveKey();
+          window.uiController.showToast('Zero-Knowledge encryption key synchronized over secure DTLS channel!', 'success');
+        }
+        if (msg.hasPassword && !this.customPassword) {
+          window.uiController.showToast('This room is password protected. Click "Password Protect" to enter password.', 'warning');
+        }
+      },
       onDisconnected: () => {
         this.updateConnectionBadge('disconnected', 'Disconnected');
         this.dom.pingBadge.textContent = '-- ms';
@@ -377,7 +389,12 @@ class CryptShareApp {
     await this.deriveActiveKey();
     try {
       this.updateConnectionBadge('connecting', 'Creating Room...');
-      await window.webrtcManager.createRoom(this.currentRoomCode, this.derivedKey);
+      await window.webrtcManager.createRoom(
+        this.currentRoomCode,
+        this.derivedKey,
+        this.encryptionSecret,
+        this.useCustomPassword
+      );
       this.updateConnectionBadge('waiting', 'Ready for Peer');
     } catch (e) {
       console.warn('Could not initialize room:', e);
@@ -569,6 +586,11 @@ class CryptShareApp {
     this.renderReceivedFiles();
     this.playSound('complete');
     window.uiController.showToast(`Received ${fileMeta.name} (${UIController.formatBytes(fileMeta.size)})`, 'success');
+
+    // Smoothly scroll down to received files section
+    setTimeout(() => {
+      this.dom.receivedSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 200);
 
     // Auto download if enabled
     if (this.autoDownload) {

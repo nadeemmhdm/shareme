@@ -9,6 +9,8 @@ class WebRTCManager {
     this.conn = null;
     this.isHost = false;
     this.roomCode = null;
+    this.rawSecret = null;
+    this.hasPassword = false;
     this.encryptionKey = null;
     this.connectedPeerId = null;
 
@@ -31,7 +33,8 @@ class WebRTCManager {
       onChatMessage: () => {},
       onError: () => {},
       onPingUpdate: () => {},
-      onRoomCollision: () => {}
+      onRoomCollision: () => {},
+      onSessionHandshake: () => {}
     };
 
     // Ping interval for connection health & latency
@@ -107,10 +110,12 @@ class WebRTCManager {
   /**
    * Create or host a room with a specific 6-digit room code
    */
-  async createRoom(roomCode, key) {
+  async createRoom(roomCode, key, rawSecret = '', hasPassword = false) {
     this.isHost = true;
     this.roomCode = roomCode;
     this.encryptionKey = key;
+    this.rawSecret = rawSecret;
+    this.hasPassword = hasPassword;
 
     const hostPeerId = `cryptshare-${roomCode}`;
 
@@ -243,6 +248,15 @@ class WebRTCManager {
       this.connectedPeerId = conn.peer;
       this.startPingMonitor();
       this.callbacks.onConnected(conn.peer);
+
+      // If host, send session handshake over DTLS channel so recipient gets key
+      if (this.isHost && this.rawSecret) {
+        this.sendControlMessage({
+          type: 'session-handshake',
+          secret: this.rawSecret,
+          hasPassword: this.hasPassword
+        });
+      }
     });
 
     conn.on('data', (data) => {
@@ -329,6 +343,10 @@ class WebRTCManager {
         this.callbacks.onPingUpdate(rtt);
         break;
       }
+
+      case 'session-handshake':
+        this.callbacks.onSessionHandshake(msg);
+        break;
 
       case 'chat-message':
         this.callbacks.onChatMessage(msg);
